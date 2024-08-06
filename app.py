@@ -133,7 +133,7 @@ def get_services():
 # e.g. localhost/services/100
 def get_service(service_id):
     # SELECT * FROM services WHERE id = service_id;:
-    # In SQLAlchemy, can also use filter() instead of filter_by():
+    # In SQLAlchemy, can also use filter() instead of filter_by(), both are kinda like WHERE in SQL (python also may have a "where" function: see DELETE request below):
     stmt = db.select(Service).filter_by(id=service_id)
     # ^^ id is from backend; service_id is from frontend ^^
 
@@ -155,3 +155,71 @@ def get_service(service_id):
 # /services, POST => Adding a service
 # /services/id, PUT/PATCH => Edit a service
 # /services/id, DELETE => Delete a specific service
+
+
+# ADD/CREATE a service to the database:
+@app.route("/services", methods=["POST"])
+def add_service():
+    service_fields = request.get_json()
+
+    new_service = Service(
+        name=service_fields.get("name"),
+        description=service_fields.get("description"),
+        price=service_fields.get("price"),
+        duration=service_fields.get("duration"),
+    )
+
+    db.session.add(new_service)
+    db.session.commit()
+    return service_schema.dump(new_service), 201
+
+
+# The UPDATE request [both put and patch to avoid redundancy]:
+@app.route("/services/<int:service_id>", methods=["PUT", "PATCH"])
+def update_service(service_id):
+    # find the service from DB w/ the specific id, service_id:
+    stmt = db.select(Service).filter_by(id=service_id)
+
+    # execute stmt:
+    service = db.session.scalar(stmt)
+
+    # retrieve data from request body:
+    body_data = request.get_json()
+
+    # update [use if/else to generalise]:
+    # if service exists:
+    if service:
+        service.name = body_data.get("name") or service.name
+        service.description = body_data.get(
+            "description") or service.description
+        service.price = body_data.get("price") or service.price
+        service.duration = body_data.get("duration") or service.duration
+
+        # Commit [don't need to add for put/patch, it's already in the session]:
+        db.session.commit()
+        return service_schema.dump(service)
+    else:
+        return {"error": f"Service with id {service_id} does not exist"}, 404
+
+
+# The DELETE request (don't need anything in JSON body in Insomnia):
+
+
+@app.route("/services/<int:service_id>", methods=["DELETE"])
+def delete_service(service_id):
+    # define statement:
+    stmt = db.select(Service).filter_by(id=service_id)
+    # OR (check this, not sure if where() exists like this):
+    # stmt = db.select(Service).where(Service.id == service_id)
+
+    # Execute stmt:
+    service = db.session.scalar(stmt)
+
+    # if service exists:
+    if service:
+        db.session.delete(service)
+        # still need to commit too:
+        db.session.commit()
+        return {"message": f"Service with id {service_id} has been deleted."}
+    else:
+        return {"error": f"Service with id {service_id} does not exist"}, 404
